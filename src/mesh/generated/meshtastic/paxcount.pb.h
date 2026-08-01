@@ -13,10 +13,13 @@
 typedef enum _meshtastic_PaxSighting_Kind {
     meshtastic_PaxSighting_Kind_WIFI_CLIENT = 0,
     meshtastic_PaxSighting_Kind_WIFI_AP = 1,
-    meshtastic_PaxSighting_Kind_BLE = 2
+    meshtastic_PaxSighting_Kind_BLE = 2,
+    meshtastic_PaxSighting_Kind_BLE_APPLE = 3,
+    meshtastic_PaxSighting_Kind_BLE_ANDROID = 4
 } meshtastic_PaxSighting_Kind;
 
 /* Struct definitions */
+typedef PB_BYTES_ARRAY_T(4) meshtastic_PaxSighting_fingerprint_t;
 /* A single WiFi MAC, AP BSSID, or BLE address observed by the Paxcounter module. */
 typedef struct _meshtastic_PaxSighting {
     /* 6-byte MAC / BSSID / BLE address */
@@ -25,6 +28,11 @@ typedef struct _meshtastic_PaxSighting {
     meshtastic_PaxSighting_Kind kind;
     /* Strongest RSSI observed for this address in the interval */
     int32_t rssi;
+    /* Optional soft sticky id derived from BLE advertisement payload
+ (e.g. manufacturer-specific data). Used to correlate rotating BLE
+ random addresses when the payload stays stable. Not a cryptographic
+ identity; empty when unknown. */
+    meshtastic_PaxSighting_fingerprint_t fingerprint;
 } meshtastic_PaxSighting;
 
 /* Paxcounter report. Counts are always present; sightings are optional
@@ -38,7 +46,7 @@ typedef struct _meshtastic_Paxcount {
     uint32_t uptime;
     /* Unique WiFi / BLE addresses seen this interval (chunk of full set) */
     pb_size_t sightings_count;
-    meshtastic_PaxSighting sightings[10];
+    meshtastic_PaxSighting sightings[8];
     /* Total unique sightings this interval (may exceed packed sightings if truncated/chunked) */
     uint32_t sighting_count;
     /* Zero-based index of this chunk when sightings are split across packets */
@@ -54,23 +62,24 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_PaxSighting_Kind_MIN meshtastic_PaxSighting_Kind_WIFI_CLIENT
-#define _meshtastic_PaxSighting_Kind_MAX meshtastic_PaxSighting_Kind_BLE
-#define _meshtastic_PaxSighting_Kind_ARRAYSIZE ((meshtastic_PaxSighting_Kind)(meshtastic_PaxSighting_Kind_BLE+1))
+#define _meshtastic_PaxSighting_Kind_MAX meshtastic_PaxSighting_Kind_BLE_ANDROID
+#define _meshtastic_PaxSighting_Kind_ARRAYSIZE ((meshtastic_PaxSighting_Kind)(meshtastic_PaxSighting_Kind_BLE_ANDROID+1))
 
 #define meshtastic_PaxSighting_kind_ENUMTYPE meshtastic_PaxSighting_Kind
 
 
 
 /* Initializer values for message structs */
-#define meshtastic_PaxSighting_init_default      {{0}, _meshtastic_PaxSighting_Kind_MIN, 0}
-#define meshtastic_Paxcount_init_default         {0, 0, 0, 0, {meshtastic_PaxSighting_init_default, meshtastic_PaxSighting_init_default, meshtastic_PaxSighting_init_default, meshtastic_PaxSighting_init_default, meshtastic_PaxSighting_init_default, meshtastic_PaxSighting_init_default, meshtastic_PaxSighting_init_default, meshtastic_PaxSighting_init_default, meshtastic_PaxSighting_init_default, meshtastic_PaxSighting_init_default}, 0, 0, 0}
-#define meshtastic_PaxSighting_init_zero         {{0}, _meshtastic_PaxSighting_Kind_MIN, 0}
-#define meshtastic_Paxcount_init_zero            {0, 0, 0, 0, {meshtastic_PaxSighting_init_zero, meshtastic_PaxSighting_init_zero, meshtastic_PaxSighting_init_zero, meshtastic_PaxSighting_init_zero, meshtastic_PaxSighting_init_zero, meshtastic_PaxSighting_init_zero, meshtastic_PaxSighting_init_zero, meshtastic_PaxSighting_init_zero, meshtastic_PaxSighting_init_zero, meshtastic_PaxSighting_init_zero}, 0, 0, 0}
+#define meshtastic_PaxSighting_init_default      {{0}, _meshtastic_PaxSighting_Kind_MIN, 0, {0, {0}}}
+#define meshtastic_Paxcount_init_default         {0, 0, 0, 0, {meshtastic_PaxSighting_init_default, meshtastic_PaxSighting_init_default, meshtastic_PaxSighting_init_default, meshtastic_PaxSighting_init_default, meshtastic_PaxSighting_init_default, meshtastic_PaxSighting_init_default, meshtastic_PaxSighting_init_default, meshtastic_PaxSighting_init_default}, 0, 0, 0}
+#define meshtastic_PaxSighting_init_zero         {{0}, _meshtastic_PaxSighting_Kind_MIN, 0, {0, {0}}}
+#define meshtastic_Paxcount_init_zero            {0, 0, 0, 0, {meshtastic_PaxSighting_init_zero, meshtastic_PaxSighting_init_zero, meshtastic_PaxSighting_init_zero, meshtastic_PaxSighting_init_zero, meshtastic_PaxSighting_init_zero, meshtastic_PaxSighting_init_zero, meshtastic_PaxSighting_init_zero, meshtastic_PaxSighting_init_zero}, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_PaxSighting_mac_tag           1
 #define meshtastic_PaxSighting_kind_tag          2
 #define meshtastic_PaxSighting_rssi_tag          3
+#define meshtastic_PaxSighting_fingerprint_tag   4
 #define meshtastic_Paxcount_wifi_tag             1
 #define meshtastic_Paxcount_ble_tag              2
 #define meshtastic_Paxcount_uptime_tag           3
@@ -83,7 +92,8 @@ extern "C" {
 #define meshtastic_PaxSighting_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, mac,               1) \
 X(a, STATIC,   SINGULAR, UENUM,    kind,              2) \
-X(a, STATIC,   SINGULAR, SINT32,   rssi,              3)
+X(a, STATIC,   SINGULAR, SINT32,   rssi,              3) \
+X(a, STATIC,   SINGULAR, BYTES,    fingerprint,       4)
 #define meshtastic_PaxSighting_CALLBACK NULL
 #define meshtastic_PaxSighting_DEFAULT NULL
 
@@ -108,8 +118,8 @@ extern const pb_msgdesc_t meshtastic_Paxcount_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_PAXCOUNT_PB_H_MAX_SIZE meshtastic_Paxcount_size
-#define meshtastic_PaxSighting_size              16
-#define meshtastic_Paxcount_size                 216
+#define meshtastic_PaxSighting_size              22
+#define meshtastic_Paxcount_size                 228
 
 #ifdef __cplusplus
 } /* extern "C" */

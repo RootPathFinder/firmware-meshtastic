@@ -97,3 +97,40 @@ uint16_t make_cmd_ble_set_adv_data(uint8_t *buf, uint8_t data_len, uint8_t *p_da
     }
     return HCI_H4_CMD_PREAMBLE_SIZE + HCIC_PARAM_SIZE_BLE_WRITE_ADV_DATA + 1;
 }
+
+uint16_t make_cmd_ble_set_event_mask(uint8_t *buf, uint8_t *le_evt_mask)
+{
+    UINT8_TO_STREAM(buf, H4_TYPE_COMMAND);
+    UINT16_TO_STREAM(buf, HCI_BLE_SET_EVENT_MASK);
+    UINT8_TO_STREAM(buf, HCIC_PARAM_SIZE_BLE_SET_EVENT_MASK);
+    ARRAY_TO_STREAM(buf, le_evt_mask, HCIC_PARAM_SIZE_BLE_SET_EVENT_MASK);
+    return HCI_H4_CMD_PREAMBLE_SIZE + HCIC_PARAM_SIZE_BLE_SET_EVENT_MASK;
+}
+
+uint16_t make_cmd_ble_set_ext_scan_params(uint8_t *buf, uint8_t own_addr_type, uint8_t filter_policy, uint8_t scan_type,
+                                          uint16_t scan_interval, uint16_t scan_window)
+{
+    UINT8_TO_STREAM(buf, H4_TYPE_COMMAND);
+    UINT16_TO_STREAM(buf, HCI_BLE_SET_EXT_SCAN_PARAMS);
+    UINT8_TO_STREAM(buf, HCIC_PARAM_SIZE_BLE_SET_EXT_SCAN_PARAMS);
+    UINT8_TO_STREAM(buf, own_addr_type);
+    UINT8_TO_STREAM(buf, filter_policy);
+    UINT8_TO_STREAM(buf, 0x01); /* Scanning_PHYs: LE 1M */
+    UINT8_TO_STREAM(buf, scan_type);
+    UINT16_TO_STREAM(buf, scan_interval);
+    UINT16_TO_STREAM(buf, scan_window);
+    return HCI_H4_CMD_PREAMBLE_SIZE + HCIC_PARAM_SIZE_BLE_SET_EXT_SCAN_PARAMS;
+}
+
+uint16_t make_cmd_ble_set_ext_scan_enable(uint8_t *buf, uint8_t enable, uint8_t filter_duplicates, uint16_t duration,
+                                          uint16_t period)
+{
+    UINT8_TO_STREAM(buf, H4_TYPE_COMMAND);
+    UINT16_TO_STREAM(buf, HCI_BLE_SET_EXT_SCAN_ENABLE);
+    UINT8_TO_STREAM(buf, HCIC_PARAM_SIZE_BLE_SET_EXT_SCAN_ENABLE);
+    UINT8_TO_STREAM(buf, enable);
+    UINT8_TO_STREAM(buf, filter_duplicates);
+    UINT16_TO_STREAM(buf, duration);
+    UINT16_TO_STREAM(buf, period);
+    return HCI_H4_CMD_PREAMBLE_SIZE + HCIC_PARAM_SIZE_BLE_SET_EXT_SCAN_ENABLE;
+}

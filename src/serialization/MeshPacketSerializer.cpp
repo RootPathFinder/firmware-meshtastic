@@ -395,11 +395,25 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                         s["mac"] = macStr;
                         if (decoded->sightings[i].kind == meshtastic_PaxSighting_Kind_WIFI_AP)
                             s["kind"] = "wifi_ap";
+                        else if (decoded->sightings[i].kind == meshtastic_PaxSighting_Kind_BLE_APPLE)
+                            s["kind"] = "ble_apple";
+                        else if (decoded->sightings[i].kind == meshtastic_PaxSighting_Kind_BLE_ANDROID)
+                            s["kind"] = "ble_android";
                         else if (decoded->sightings[i].kind == meshtastic_PaxSighting_Kind_BLE)
                             s["kind"] = "ble";
                         else
                             s["kind"] = "wifi_client";
                         s["rssi"] = (Json::Int)decoded->sightings[i].rssi;
+                        if (decoded->sightings[i].fingerprint.size) {
+                            char fpStr[16];
+                            size_t fpN = decoded->sightings[i].fingerprint.size;
+                            if (fpN > 4)
+                                fpN = 4;
+                            size_t o = 0;
+                            for (size_t b = 0; b < fpN && o + 3 < sizeof(fpStr); b++)
+                                o += snprintf(fpStr + o, sizeof(fpStr) - o, "%02x", decoded->sightings[i].fingerprint.bytes[b]);
+                            s["fingerprint"] = fpStr;
+                        }
                         sightings.append(s);
                     }
                     msgPayload["sightings"] = sightings;

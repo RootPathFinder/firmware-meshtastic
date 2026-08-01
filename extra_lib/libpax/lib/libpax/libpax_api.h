@@ -122,8 +122,10 @@ void libpax_default_config(struct libpax_config_t *configuration);
  * Optional callback invoked for each WiFi/BLE address that passes the RSSI filter.
  * Not filtered to locally-administered MACs (unlike the count path).
  * Must be lightweight; may be called from WiFi RX or BLE HCI task context.
+ * For BLE, adv_data/adv_len are the advertisement payload (may be NULL/0).
+ * For WiFi, adv_data is always NULL.
  */
-typedef void (*libpax_mac_callback_t)(const uint8_t mac[6], int rssi, int kind);
+typedef void (*libpax_mac_callback_t)(const uint8_t mac[6], int rssi, int kind, const uint8_t *adv_data, uint8_t adv_len);
 
 void libpax_set_mac_callback(libpax_mac_callback_t cb);
 
