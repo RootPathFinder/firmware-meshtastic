@@ -3,8 +3,12 @@
 #include "Default.h"
 #include "MeshService.h"
 #include "PaxcounterModule.h"
+#include "PowerFSM.h"
+#if HAS_SCREEN
+#include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/SharedUIDisplay.h"
+#endif
 #include "graphics/images.h"
 #include <esp_event.h>
 #include <freertos/timers.h>
@@ -104,9 +108,53 @@ static void classifyBleAdv(const uint8_t *adv, uint8_t adv_len, meshtastic_PaxSi
     }
 }
 
+void PaxcounterModule::upsertUiSighting(const SightingEntry &incoming)
+{
+    if (!paxcounterModule)
+        return;
+
+    portENTER_CRITICAL(&paxcounterModule->uiSightingsMux);
+    for (size_t i = 0; i < paxcounterModule->uiSightingCount; i++) {
+        SightingEntry &e = paxcounterModule->uiSightings[i];
+        bool same = false;
+        if (incoming.fingerprint_len && e.fingerprint_len == incoming.fingerprint_len &&
+            memcmp(e.fingerprint, incoming.fingerprint, incoming.fingerprint_len) == 0) {
+            same = true;
+        } else if (e.kind == incoming.kind && memcmp(e.mac, incoming.mac, 6) == 0) {
+            same = true;
+        }
+        if (same) {
+            memcpy(e.mac, incoming.mac, 6);
+            e.kind = incoming.kind;
+            if (incoming.rssi > e.rssi)
+                e.rssi = incoming.rssi;
+            if (incoming.fingerprint_len) {
+                memcpy(e.fingerprint, incoming.fingerprint, incoming.fingerprint_len);
+                e.fingerprint_len = incoming.fingerprint_len;
+            }
+            portEXIT_CRITICAL(&paxcounterModule->uiSightingsMux);
+            return;
+        }
+    }
+
+    if (paxcounterModule->uiSightingCount < MAX_UI_SIGHTINGS) {
+        paxcounterModule->uiSightings[paxcounterModule->uiSightingCount++] = incoming;
+    } else {
+        // Replace the weakest entry if this signal is stronger.
+        size_t weakest = 0;
+        for (size_t i = 1; i < MAX_UI_SIGHTINGS; i++) {
+            if (paxcounterModule->uiSightings[i].rssi < paxcounterModule->uiSightings[weakest].rssi)
+                weakest = i;
+        }
+        if (incoming.rssi > paxcounterModule->uiSightings[weakest].rssi)
+            paxcounterModule->uiSightings[weakest] = incoming;
+    }
+    portEXIT_CRITICAL(&paxcounterModule->uiSightingsMux);
+}
+
 void PaxcounterModule::handleMacSeen(const uint8_t mac[6], int rssi, int kind, const uint8_t *adv_data, uint8_t adv_len)
 {
-    if (!paxcounterModule || !moduleConfig.paxcounter.report_ids)
+    if (!paxcounterModule)
         return;
 
     meshtastic_PaxSighting_Kind k = meshtastic_PaxSighting_Kind_WIFI_CLIENT;
@@ -117,12 +165,25 @@ void PaxcounterModule::handleMacSeen(const uint8_t mac[6], int rssi, int kind, c
     else if (kind == LIBPAX_MAC_KIND_BLE)
         classifyBleAdv(adv_data, adv_len, &k, fp, &fpLen);
 
+    SightingEntry incoming = {};
+    memcpy(incoming.mac, mac, 6);
+    incoming.kind = k;
+    incoming.rssi = rssi;
+    incoming.fingerprint_len = fpLen;
+    if (fpLen)
+        memcpy(incoming.fingerprint, fp, fpLen);
+
+    // Always keep a live UI table (display works even if mesh report_ids is off).
+    upsertUiSighting(incoming);
+
+    if (!moduleConfig.paxcounter.report_ids)
+        return;
+
     portENTER_CRITICAL(&paxcounterModule->sightingsMux);
     for (size_t i = 0; i < paxcounterModule->sightingCount; i++) {
         SightingEntry &e = paxcounterModule->sightings[i];
         bool same = false;
         if (fpLen && e.fingerprint_len == fpLen && memcmp(e.fingerprint, fp, fpLen) == 0) {
-            // Same soft id across rotating BLE random addresses
             same = true;
         } else if (e.kind == k && memcmp(e.mac, mac, 6) == 0) {
             same = true;
@@ -142,12 +203,7 @@ void PaxcounterModule::handleMacSeen(const uint8_t mac[6], int rssi, int kind, c
     }
     if (paxcounterModule->sightingCount < MAX_SIGHTINGS) {
         SightingEntry &e = paxcounterModule->sightings[paxcounterModule->sightingCount++];
-        memcpy(e.mac, mac, 6);
-        e.kind = k;
-        e.rssi = rssi;
-        e.fingerprint_len = fpLen;
-        if (fpLen)
-            memcpy(e.fingerprint, fp, fpLen);
+        e = incoming;
     }
     portEXIT_CRITICAL(&paxcounterModule->sightingsMux);
 }
@@ -286,9 +342,12 @@ int32_t PaxcounterModule::runOnce()
             configuration.ble_rssi_threshold = Default::getConfiguredOrDefault(moduleConfig.paxcounter.ble_threshold, -80);
             libpax_update_config(&configuration);
 
+            // Collect IDs for the OLED whenever a screen may be present; mesh TX still gated by report_ids.
+            libpax_set_mac_callback(handleMacSeen);
             if (moduleConfig.paxcounter.report_ids) {
-                libpax_set_mac_callback(handleMacSeen);
                 LOG_INFO("PaxcounterModule: report_ids enabled, collecting WiFi/BLE MAC sightings");
+            } else {
+                LOG_INFO("PaxcounterModule: collecting WiFi/BLE MAC sightings for display only");
             }
 
             // internal processing initialization
@@ -302,8 +361,10 @@ int32_t PaxcounterModule::runOnce()
             wifi_sniffer_init(0);
             libpax_counter_start();
             startWifiChannelTimer(configuration.LIBPAX_WIFI_CHANNEL_switch_interval);
+            refreshPaxScreen(true); // show Pax frame on start (esp. buttonless boards)
         } else {
-            sendInfo(NODENUM_BROADCAST);
+            if (sendInfo(NODENUM_BROADCAST))
+                refreshPaxScreen(false);
         }
         return Default::getConfiguredOrDefaultMsScaled(moduleConfig.paxcounter.paxcounter_update_interval,
                                                        default_telemetry_broadcast_interval_secs, numOnlineNodes);
@@ -312,10 +373,55 @@ int32_t PaxcounterModule::runOnce()
     }
 }
 
+void PaxcounterModule::refreshPaxScreen(bool forceFocus)
+{
+#if HAS_SCREEN
+    if (!isActive())
+        return;
+
+    // Boards without a user button (e.g. RAK3112) can't navigate frames manually.
+    // On each pax interval: wake the panel and jump to the Pax frame.
+    bool hasButton =
+#if defined(BUTTON_PIN)
+        true;
+#else
+        config.device.button_gpio != 0;
+#endif
+    if (!hasButton || forceFocus) {
+        if (!hasButton)
+            powerFSM.trigger(EVENT_INPUT);
+        requestFocus();
+        UIFrameEvent e;
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+        notifyObservers(&e);
+    } else {
+        UIFrameEvent e;
+        e.action = UIFrameEvent::Action::REDRAW_ONLY;
+        notifyObservers(&e);
+    }
+#else
+    (void)forceFocus;
+#endif
+}
+
 #if HAS_SCREEN
 
-#include "graphics/ScreenFonts.h"
-#include "graphics/SharedUIDisplay.h"
+static const char *kindLabel(meshtastic_PaxSighting_Kind kind)
+{
+    switch (kind) {
+    case meshtastic_PaxSighting_Kind_WIFI_AP:
+        return "AP";
+    case meshtastic_PaxSighting_Kind_BLE_APPLE:
+        return "iOS";
+    case meshtastic_PaxSighting_Kind_BLE_ANDROID:
+        return "And";
+    case meshtastic_PaxSighting_Kind_BLE:
+        return "BLE";
+    case meshtastic_PaxSighting_Kind_WIFI_CLIENT:
+    default:
+        return "WiFi";
+    }
+}
 
 void PaxcounterModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -324,23 +430,72 @@ void PaxcounterModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     display->setFont(FONT_SMALL);
     int line = 1;
 
-    // === Set Title
-    const char *titleStr = "Pax";
-
-    // === Header ===
-    graphics::drawCommonHeader(display, x, y, titleStr);
-
-    char buffer[50];
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_SMALL);
+    graphics::drawCommonHeader(display, x, y, "Pax");
 
     libpax_counter_count(&count_from_libpax);
 
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->setFont(FONT_SMALL);
-    display->drawStringf(display->getWidth() / 2 + x, graphics::getTextPositions(display)[line++], buffer,
-                         "WiFi: %d\nBLE: %d\nUptime: %ds", count_from_libpax.wifi_count, count_from_libpax.ble_count,
-                         millis() / 1000);
+    char buffer[64];
+    const int *rows = graphics::getTextPositions(display);
+    snprintf(buffer, sizeof(buffer), "WiFi:%u  BLE:%u", count_from_libpax.wifi_count, count_from_libpax.ble_count);
+    display->drawString(x, rows[line++], buffer);
+
+    SightingEntry local[MAX_UI_SIGHTINGS];
+    size_t n = 0;
+    portENTER_CRITICAL(&uiSightingsMux);
+    n = uiSightingCount;
+    memcpy(local, uiSightings, n * sizeof(SightingEntry));
+    portEXIT_CRITICAL(&uiSightingsMux);
+
+    for (size_t i = 1; i < n; i++) {
+        SightingEntry key = local[i];
+        size_t j = i;
+        while (j > 0 && local[j - 1].rssi < key.rssi) {
+            local[j] = local[j - 1];
+            j--;
+        }
+        local[j] = key;
+    }
+
+    // getTextPositions() exposes indices 0..6 (header uses 0).
+    int availableRows = 0;
+    for (int i = line; i <= 6; i++) {
+        if (rows[i] + FONT_HEIGHT_SMALL < display->getHeight() - FONT_HEIGHT_SMALL)
+            availableRows++;
+        else
+            break;
+    }
+    if (availableRows < 1)
+        availableRows = 1;
+
+    if (n == 0) {
+        display->drawString(x, rows[line], "Scanning IDs...");
+        graphics::drawCommonFooter(display, x, y);
+        return;
+    }
+
+    const size_t pageSize = (size_t)availableRows;
+    const size_t pageCount = (n + pageSize - 1) / pageSize;
+    const size_t page = (pageCount > 1) ? ((millis() / UI_PAGE_MS) % pageCount) : 0;
+    const size_t start = page * pageSize;
+    const size_t end = (start + pageSize < n) ? (start + pageSize) : n;
+
+    for (size_t i = start; i < end && line <= 6; i++) {
+        const SightingEntry &e = local[i];
+        char id[20];
+        if (e.fingerprint_len >= 4) {
+            snprintf(id, sizeof(id), "%02x%02x%02x%02x", e.fingerprint[0], e.fingerprint[1], e.fingerprint[2], e.fingerprint[3]);
+        } else {
+            snprintf(id, sizeof(id), "%02x%02x%02x", e.mac[3], e.mac[4], e.mac[5]);
+        }
+        if (pageCount > 1 && i == start) {
+            snprintf(buffer, sizeof(buffer), "%4ld %s %s %u/%u", (long)e.rssi, kindLabel(e.kind), id, (unsigned)(page + 1),
+                     (unsigned)pageCount);
+        } else {
+            snprintf(buffer, sizeof(buffer), "%4ld %s %s", (long)e.rssi, kindLabel(e.kind), id);
+        }
+        display->drawString(x, rows[line++], buffer);
+    }
+
     graphics::drawCommonFooter(display, x, y);
 }
 #endif // HAS_SCREEN
