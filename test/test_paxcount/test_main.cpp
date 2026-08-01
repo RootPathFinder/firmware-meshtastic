@@ -29,7 +29,12 @@ void test_paxcount_full_chunk_encodes_under_payload_len(void)
     for (pb_size_t i = 0; i < pl.sightings_count; i++) {
         for (int b = 0; b < 6; b++)
             pl.sightings[i].mac[b] = (uint8_t)(i * 16 + b);
-        pl.sightings[i].kind = (i & 1) ? meshtastic_PaxSighting_Kind_WIFI_AP : meshtastic_PaxSighting_Kind_WIFI_CLIENT;
+        static const meshtastic_PaxSighting_Kind kinds[] = {
+            meshtastic_PaxSighting_Kind_WIFI_CLIENT,
+            meshtastic_PaxSighting_Kind_WIFI_AP,
+            meshtastic_PaxSighting_Kind_BLE,
+        };
+        pl.sightings[i].kind = kinds[i % 3];
         pl.sightings[i].rssi = -40 - (int32_t)i;
     }
 
@@ -48,6 +53,7 @@ void test_paxcount_full_chunk_encodes_under_payload_len(void)
     TEST_ASSERT_EQUAL_UINT32(pl.sightings_count, decoded.sightings_count);
     TEST_ASSERT_EQUAL_UINT8_ARRAY(pl.sightings[0].mac, decoded.sightings[0].mac, 6);
     TEST_ASSERT_EQUAL_INT32(pl.sightings[9].rssi, decoded.sightings[9].rssi);
+    TEST_ASSERT_EQUAL_INT32(meshtastic_PaxSighting_Kind_BLE, decoded.sightings[2].kind);
 }
 
 void test_report_ids_defaults_false(void)

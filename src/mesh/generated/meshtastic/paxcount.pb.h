@@ -12,15 +12,16 @@
 /* Enum definitions */
 typedef enum _meshtastic_PaxSighting_Kind {
     meshtastic_PaxSighting_Kind_WIFI_CLIENT = 0,
-    meshtastic_PaxSighting_Kind_WIFI_AP = 1
+    meshtastic_PaxSighting_Kind_WIFI_AP = 1,
+    meshtastic_PaxSighting_Kind_BLE = 2
 } meshtastic_PaxSighting_Kind;
 
 /* Struct definitions */
-/* A single WiFi MAC or BSSID observed by the Paxcounter module. */
+/* A single WiFi MAC, AP BSSID, or BLE address observed by the Paxcounter module. */
 typedef struct _meshtastic_PaxSighting {
-    /* 6-byte MAC address (WiFi client) or BSSID (AP) */
+    /* 6-byte MAC / BSSID / BLE address */
     pb_byte_t mac[6];
-    /* Whether this address was seen as a client or an AP BSSID */
+    /* Whether this address was seen as a WiFi client, AP BSSID, or BLE device */
     meshtastic_PaxSighting_Kind kind;
     /* Strongest RSSI observed for this address in the interval */
     int32_t rssi;
@@ -35,7 +36,7 @@ typedef struct _meshtastic_Paxcount {
     uint32_t ble;
     /* Uptime in seconds */
     uint32_t uptime;
-    /* Unique WiFi client MACs / AP BSSIDs seen this interval (chunk of full set) */
+    /* Unique WiFi / BLE addresses seen this interval (chunk of full set) */
     pb_size_t sightings_count;
     meshtastic_PaxSighting sightings[10];
     /* Total unique sightings this interval (may exceed packed sightings if truncated/chunked) */
@@ -53,8 +54,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_PaxSighting_Kind_MIN meshtastic_PaxSighting_Kind_WIFI_CLIENT
-#define _meshtastic_PaxSighting_Kind_MAX meshtastic_PaxSighting_Kind_WIFI_AP
-#define _meshtastic_PaxSighting_Kind_ARRAYSIZE ((meshtastic_PaxSighting_Kind)(meshtastic_PaxSighting_Kind_WIFI_AP+1))
+#define _meshtastic_PaxSighting_Kind_MAX meshtastic_PaxSighting_Kind_BLE
+#define _meshtastic_PaxSighting_Kind_ARRAYSIZE ((meshtastic_PaxSighting_Kind)(meshtastic_PaxSighting_Kind_BLE+1))
 
 #define meshtastic_PaxSighting_kind_ENUMTYPE meshtastic_PaxSighting_Kind
 

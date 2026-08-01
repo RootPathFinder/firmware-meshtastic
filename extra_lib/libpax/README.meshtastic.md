@@ -8,7 +8,18 @@ builds do not auto-compile it) from
 ## Patches
 
 - `libpax_set_mac_callback()` - optional callback for full WiFi MAC / BSSID
-  sightings (used when `ModuleConfig.PaxcounterConfig.report_ids` is enabled).
+  and BLE address sightings (used when `ModuleConfig.PaxcounterConfig.report_ids`
+  is enabled).
 - WiFi sniffer invokes the callback for client addresses and for AP BSSIDs
-  (beacon / probe-response). The count path is unchanged (still only counts
+  (beacon / probe-response). BLE scan invokes it for advertiser addresses that
+  pass the BLE RSSI filter. The count path is unchanged (still only counts
   locally-administered MACs via the truncated bitmap).
+
+When a MAC is accepted after RSSI filtering, libpax may call this with `kind`:
+
+- `0` (`LIBPAX_MAC_KIND_WIFI_CLIENT`) - WiFi station address
+- `1` (`LIBPAX_MAC_KIND_WIFI_AP`) - AP BSSID
+- `2` (`LIBPAX_MAC_KIND_BLE`) - BLE advertiser address
+
+RSSI is the packet RSSI (dBm). Callbacks may fire for the same MAC more than once;
+firmware deduplicates.

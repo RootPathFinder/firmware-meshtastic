@@ -186,6 +186,9 @@ void hci_evt_process(void *pvParameters)
                             continue; // do not count weak signal mac
                         else {
                             mac_add(addr + 6 * i, MAC_SNIFF_BLE);
+                            if (libpax_mac_callback) {
+                                libpax_mac_callback(addr + 6 * i, rssi, LIBPAX_MAC_KIND_BLE);
+                            }
                         }
                     }
 
