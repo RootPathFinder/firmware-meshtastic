@@ -13,10 +13,27 @@
  */
 class PaxcounterModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Paxcount>
 {
+    static constexpr size_t MAX_SIGHTINGS = 64;
+    static constexpr size_t SIGHTINGS_PER_CHUNK = 10; // matches Paxcount.sightings max_count
+
+    struct SightingEntry {
+        uint8_t mac[6];
+        meshtastic_PaxSighting_Kind kind;
+        int32_t rssi;
+    };
+
     bool firstTime = true;
     bool reportedDataSent = true;
 
+    SightingEntry sightings[MAX_SIGHTINGS] = {};
+    size_t sightingCount = 0;
+    portMUX_TYPE sightingsMux = portMUX_INITIALIZER_UNLOCKED;
+
     static void handlePaxCounterReportRequest();
+    static void handleMacSeen(const uint8_t mac[6], int rssi, int kind);
+
+    void fillCounts(meshtastic_Paxcount &pl) const;
+    bool sendChunk(NodeNum dest, const meshtastic_Paxcount &pl);
 
   public:
     PaxcounterModule();

@@ -1,17 +1,16 @@
 #if ARCH_PORTDUINO
 #include "MeshPacketSerializer.h"
+#include "../mesh/generated/meshtastic/paxcount.pb.h"
 #include "NodeDB.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
+#include "mesh/generated/meshtastic/remote_hardware.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
 #include "modules/RoutingModule.h"
 #include <DebugConfiguration.h>
+#include <cstdio>
 #include <json/json.h>
 #include <memory>
 #include <mesh-pb-constants.h>
-#if defined(ARCH_ESP32)
-#include "../mesh/generated/meshtastic/paxcount.pb.h"
-#endif
-#include "mesh/generated/meshtastic/remote_hardware.pb.h"
 #include <sys/types.h>
 
 static const char *errStr = "Error decoding proto for %s message!";
@@ -372,7 +371,6 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
             jsonObj["payload"] = msgPayload;
             break;
         }
-#ifdef ARCH_ESP32
         case meshtastic_PortNum_PAXCOUNTER_APP: {
             msgType = "paxcounter";
             meshtastic_Paxcount scratch;
@@ -383,13 +381,31 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                 msgPayload["wifi_count"] = (Json::UInt)decoded->wifi;
                 msgPayload["ble_count"] = (Json::UInt)decoded->ble;
                 msgPayload["uptime"] = (Json::UInt)decoded->uptime;
+                if (decoded->sighting_count || decoded->sightings_count) {
+                    msgPayload["sighting_count"] = (Json::UInt)decoded->sighting_count;
+                    msgPayload["chunk_index"] = (Json::UInt)decoded->chunk_index;
+                    msgPayload["chunk_total"] = (Json::UInt)decoded->chunk_total;
+                    Json::Value sightings(Json::arrayValue);
+                    for (pb_size_t i = 0; i < decoded->sightings_count; i++) {
+                        Json::Value s(Json::objectValue);
+                        char macStr[18];
+                        snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x", decoded->sightings[i].mac[0],
+                                 decoded->sightings[i].mac[1], decoded->sightings[i].mac[2], decoded->sightings[i].mac[3],
+                                 decoded->sightings[i].mac[4], decoded->sightings[i].mac[5]);
+                        s["mac"] = macStr;
+                        s["kind"] =
+                            (decoded->sightings[i].kind == meshtastic_PaxSighting_Kind_WIFI_AP) ? "wifi_ap" : "wifi_client";
+                        s["rssi"] = (Json::Int)decoded->sightings[i].rssi;
+                        sightings.append(s);
+                    }
+                    msgPayload["sightings"] = sightings;
+                }
                 jsonObj["payload"] = msgPayload;
             } else if (shouldLog) {
                 LOG_ERROR(errStr, msgType.c_str());
             }
             break;
         }
-#endif
         case meshtastic_PortNum_REMOTE_HARDWARE_APP: {
             meshtastic_HardwareMessage scratch;
             meshtastic_HardwareMessage *decoded = NULL;

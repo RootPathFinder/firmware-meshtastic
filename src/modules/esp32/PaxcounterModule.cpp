@@ -8,6 +8,7 @@
 #include "graphics/images.h"
 #include <esp_event.h>
 #include <freertos/timers.h>
+#include <string.h>
 
 // Arduino WiFi has a wifiscan.h too, so declare the libpax scanner hooks here.
 void set_wifi_channels(uint16_t channels_map);
@@ -40,6 +41,32 @@ static void ensureDefaultEventLoop()
 
 PaxcounterModule *paxcounterModule;
 
+void PaxcounterModule::handleMacSeen(const uint8_t mac[6], int rssi, int kind)
+{
+    if (!paxcounterModule || !moduleConfig.paxcounter.report_ids)
+        return;
+
+    auto k = (kind == LIBPAX_MAC_KIND_WIFI_AP) ? meshtastic_PaxSighting_Kind_WIFI_AP : meshtastic_PaxSighting_Kind_WIFI_CLIENT;
+
+    portENTER_CRITICAL(&paxcounterModule->sightingsMux);
+    for (size_t i = 0; i < paxcounterModule->sightingCount; i++) {
+        SightingEntry &e = paxcounterModule->sightings[i];
+        if (e.kind == k && memcmp(e.mac, mac, 6) == 0) {
+            if (rssi > e.rssi)
+                e.rssi = rssi;
+            portEXIT_CRITICAL(&paxcounterModule->sightingsMux);
+            return;
+        }
+    }
+    if (paxcounterModule->sightingCount < MAX_SIGHTINGS) {
+        SightingEntry &e = paxcounterModule->sightings[paxcounterModule->sightingCount++];
+        memcpy(e.mac, mac, 6);
+        e.kind = k;
+        e.rssi = rssi;
+    }
+    portEXIT_CRITICAL(&paxcounterModule->sightingsMux);
+}
+
 /**
  * Callback function for libpax.
  * We only clear our sent flag here, since this function is called from another thread, so we
@@ -60,6 +87,25 @@ PaxcounterModule::PaxcounterModule()
 {
 }
 
+void PaxcounterModule::fillCounts(meshtastic_Paxcount &pl) const
+{
+    pl.wifi = count_from_libpax.wifi_count;
+    pl.ble = count_from_libpax.ble_count;
+    pl.uptime = millis() / 1000;
+}
+
+bool PaxcounterModule::sendChunk(NodeNum dest, const meshtastic_Paxcount &pl)
+{
+    meshtastic_MeshPacket *p = allocDataProtobuf(pl);
+    if (!p)
+        return false;
+    p->to = dest;
+    p->decoded.want_response = false;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    service->sendToMesh(p, RX_SRC_LOCAL, true);
+    return true;
+}
+
 /**
  * Send the Pax information to the mesh if we got new data from libpax.
  * This is called periodically from our runOnce() method and will actually send the data to the mesh
@@ -75,22 +121,48 @@ bool PaxcounterModule::sendInfo(NodeNum dest)
     LOG_INFO("PaxcounterModule: send pax info wifi=%d; ble=%d; uptime=%lu", count_from_libpax.wifi_count,
              count_from_libpax.ble_count, millis() / 1000);
 
-    meshtastic_Paxcount pl = meshtastic_Paxcount_init_default;
-    pl.wifi = count_from_libpax.wifi_count;
-    pl.ble = count_from_libpax.ble_count;
-    pl.uptime = millis() / 1000;
+    // Snapshot sightings under the lock so the sniffer can keep updating.
+    SightingEntry local[MAX_SIGHTINGS];
+    size_t localCount = 0;
+    if (moduleConfig.paxcounter.report_ids) {
+        portENTER_CRITICAL(&sightingsMux);
+        localCount = sightingCount;
+        memcpy(local, sightings, localCount * sizeof(SightingEntry));
+        sightingCount = 0;
+        portEXIT_CRITICAL(&sightingsMux);
+    }
 
-    meshtastic_MeshPacket *p = allocDataProtobuf(pl);
-    if (!p)
-        return false;
-    p->to = dest;
-    p->decoded.want_response = false;
-    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    if (!moduleConfig.paxcounter.report_ids || localCount == 0) {
+        meshtastic_Paxcount pl = meshtastic_Paxcount_init_default;
+        fillCounts(pl);
+        if (!sendChunk(dest, pl))
+            return false;
+        paxcounterModule->reportedDataSent = true;
+        return true;
+    }
 
-    service->sendToMesh(p, RX_SRC_LOCAL, true);
+    const uint32_t chunkTotal = (uint32_t)((localCount + SIGHTINGS_PER_CHUNK - 1) / SIGHTINGS_PER_CHUNK);
+    for (uint32_t chunk = 0; chunk < chunkTotal; chunk++) {
+        meshtastic_Paxcount pl = meshtastic_Paxcount_init_default;
+        fillCounts(pl);
+        pl.sighting_count = (uint32_t)localCount;
+        pl.chunk_index = chunk;
+        pl.chunk_total = chunkTotal;
+
+        const size_t start = (size_t)chunk * SIGHTINGS_PER_CHUNK;
+        const size_t n = (localCount - start > SIGHTINGS_PER_CHUNK) ? SIGHTINGS_PER_CHUNK : (localCount - start);
+        pl.sightings_count = (pb_size_t)n;
+        for (size_t i = 0; i < n; i++) {
+            memcpy(pl.sightings[i].mac, local[start + i].mac, 6);
+            pl.sightings[i].kind = local[start + i].kind;
+            pl.sightings[i].rssi = local[start + i].rssi;
+        }
+
+        if (!sendChunk(dest, pl))
+            return false;
+    }
 
     paxcounterModule->reportedDataSent = true;
-
     return true;
 }
 
@@ -102,9 +174,7 @@ bool PaxcounterModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, m
 meshtastic_MeshPacket *PaxcounterModule::allocReply()
 {
     meshtastic_Paxcount pl = meshtastic_Paxcount_init_default;
-    pl.wifi = count_from_libpax.wifi_count;
-    pl.ble = count_from_libpax.ble_count;
-    pl.uptime = millis() / 1000;
+    fillCounts(pl);
     return allocDataProtobuf(pl);
 }
 
@@ -127,6 +197,11 @@ int32_t PaxcounterModule::runOnce()
             configuration.wifi_rssi_threshold = Default::getConfiguredOrDefault(moduleConfig.paxcounter.wifi_threshold, -80);
             configuration.ble_rssi_threshold = Default::getConfiguredOrDefault(moduleConfig.paxcounter.ble_threshold, -80);
             libpax_update_config(&configuration);
+
+            if (moduleConfig.paxcounter.report_ids) {
+                libpax_set_mac_callback(handleMacSeen);
+                LOG_INFO("PaxcounterModule: report_ids enabled, collecting WiFi MAC/BSSID sightings");
+            }
 
             // internal processing initialization
             libpax_counter_init(handlePaxCounterReportRequest, &count_from_libpax,
