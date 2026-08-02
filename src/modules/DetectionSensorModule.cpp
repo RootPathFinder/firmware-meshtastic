@@ -1,5 +1,6 @@
 #include "DetectionSensorModule.h"
 #include "Default.h"
+#include "DetectionSensorDwell.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -66,6 +67,7 @@ int32_t DetectionSensorModule::runOnce()
     // moduleConfig.detection_sensor.monitor_pin = 10; // WisBlock PIR IO6
     // moduleConfig.detection_sensor.monitor_pin = 21; // WisBlock RAK12013 Radar IO6
     // moduleConfig.detection_sensor.minimum_broadcast_secs = 30;
+    // moduleConfig.detection_sensor.minimum_detect_secs = 2; // ignore sub-2s glitches
     // moduleConfig.detection_sensor.state_broadcast_secs = 120;
     // moduleConfig.detection_sensor.detection_trigger_type =
     // meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_HIGH;
@@ -98,7 +100,9 @@ int32_t DetectionSensorModule::runOnce()
 
     if (!Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
-        bool isDetected = hasDetectionEvent();
+        const bool pinActive = pinIsActive();
+        const bool isDetected = detectionSensorUpdateDwell(pinActive, moduleConfig.detection_sensor.minimum_detect_secs, millis(),
+                                                           dwellArmed, dwellStartedMs);
         DetectionSensorTriggerVerdict verdict = handlers[configuredTriggerType()](wasDetected, isDetected);
         wasDetected = isDetected;
         switch (verdict) {
@@ -114,12 +118,12 @@ int32_t DetectionSensorModule::runOnce()
     }
     // Even if we haven't detected an event, broadcast our current state to the mesh on the scheduled interval as a sort
     // of heartbeat. We only do this if the minimum broadcast interval is greater than zero, otherwise we'll only broadcast state
-    // change detections.
+    // change detections. Heartbeat reports the raw pin (not dwell-confirmed) so operators can see chatter.
     if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
         !Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
                                                                         default_telemetry_broadcast_interval_secs))) {
-        sendCurrentStateMessage(hasDetectionEvent());
+        sendCurrentStateMessage(pinIsActive());
         return DELAYED_INTERVAL;
     }
     return GPIO_POLLING_INTERVAL;
@@ -173,7 +177,7 @@ void DetectionSensorModule::sendCurrentStateMessage(bool state)
     delete[] message;
 }
 
-bool DetectionSensorModule::hasDetectionEvent()
+bool DetectionSensorModule::pinIsActive()
 {
     bool currentState = digitalRead(moduleConfig.detection_sensor.monitor_pin);
     // LOG_DEBUG("Detection Sensor Module: Current state: %i", currentState);

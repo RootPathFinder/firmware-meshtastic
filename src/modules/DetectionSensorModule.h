@@ -15,9 +15,11 @@ class DetectionSensorModule : public SinglePortModule, private concurrency::OSTh
     bool firstTime = true;
     uint32_t lastSentToMesh = 0;
     bool wasDetected = false;
+    bool dwellArmed = false;
+    uint32_t dwellStartedMs = 0;
     void sendDetectionMessage();
     void sendCurrentStateMessage(bool state);
-    bool hasDetectionEvent();
+    bool pinIsActive();
 };
 
 extern DetectionSensorModule *detectionSensorModule;
