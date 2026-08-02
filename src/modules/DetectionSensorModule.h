@@ -17,7 +17,7 @@ class DetectionSensorModule : public SinglePortModule, private concurrency::OSTh
     bool wasDetected = false;
     bool dwellArmed = false;
     uint32_t dwellStartedMs = 0;
-    void sendDetectionMessage();
+    void sendDetectionMessage(uint32_t dwellMs);
     void sendCurrentStateMessage(bool state);
     bool pinIsActive();
 };

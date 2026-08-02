@@ -24,3 +24,11 @@ inline bool detectionSensorUpdateDwell(bool pinActive, uint32_t minimum_detect_s
     // Unsigned subtraction is rollover-safe (same approach as Throttle).
     return (nowMs - dwellStartedMs) >= (minimum_detect_secs * 1000UL);
 }
+
+// Elapsed continuous-active time while dwell is armed; 0 if not armed / no dwell.
+inline uint32_t detectionSensorDwellElapsedMs(bool dwellArmed, uint32_t dwellStartedMs, uint32_t nowMs)
+{
+    if (!dwellArmed)
+        return 0;
+    return nowMs - dwellStartedMs;
+}

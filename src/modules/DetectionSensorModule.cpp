@@ -100,15 +100,21 @@ int32_t DetectionSensorModule::runOnce()
 
     if (!Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
+        const uint32_t nowMs = millis();
         const bool pinActive = pinIsActive();
-        const bool isDetected = detectionSensorUpdateDwell(pinActive, moduleConfig.detection_sensor.minimum_detect_secs, millis(),
+        const bool isDetected = detectionSensorUpdateDwell(pinActive, moduleConfig.detection_sensor.minimum_detect_secs, nowMs,
                                                            dwellArmed, dwellStartedMs);
         DetectionSensorTriggerVerdict verdict = handlers[configuredTriggerType()](wasDetected, isDetected);
         wasDetected = isDetected;
         switch (verdict) {
-        case DetectionSensorVerdictDetected:
-            sendDetectionMessage();
+        case DetectionSensorVerdictDetected: {
+            // Measured continuous-active time at trip (0 when dwell is disabled).
+            const uint32_t dwellMs = moduleConfig.detection_sensor.minimum_detect_secs > 0
+                                         ? detectionSensorDwellElapsedMs(dwellArmed, dwellStartedMs, nowMs)
+                                         : 0;
+            sendDetectionMessage(dwellMs);
             return DELAYED_INTERVAL;
+        }
         case DetectionSensorVerdictSendState:
             sendCurrentStateMessage(isDetected);
             return DELAYED_INTERVAL;
@@ -129,14 +135,16 @@ int32_t DetectionSensorModule::runOnce()
     return GPIO_POLLING_INTERVAL;
 }
 
-void DetectionSensorModule::sendDetectionMessage()
+void DetectionSensorModule::sendDetectionMessage(uint32_t dwellMs)
 {
     LOG_DEBUG("Detected event observed. Send message");
-    char *message = new char[40];
-    sprintf(message, "%s detected", moduleConfig.detection_sensor.name);
+    char message[64];
+    if (dwellMs > 0)
+        snprintf(message, sizeof(message), "%s detected dwell_ms=%u", moduleConfig.detection_sensor.name, (unsigned)dwellMs);
+    else
+        snprintf(message, sizeof(message), "%s detected", moduleConfig.detection_sensor.name);
     meshtastic_MeshPacket *p = allocDataPacket();
     if (!p) {
-        delete[] message;
         return;
     }
     p->want_ack = false;
@@ -153,7 +161,6 @@ void DetectionSensorModule::sendDetectionMessage()
         service->sendToMesh(p);
     } else
         LOG_ERROR("Message not allow on Public channel");
-    delete[] message;
 }
 
 void DetectionSensorModule::sendCurrentStateMessage(bool state)

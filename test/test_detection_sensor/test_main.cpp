@@ -72,6 +72,12 @@ void test_dwell_glitch_resets_timer(void)
     TEST_ASSERT_TRUE(detectionSensorUpdateDwell(true, 2, 2600, armed, started));
 }
 
+void test_dwell_elapsed_ms(void)
+{
+    TEST_ASSERT_EQUAL_UINT32(0, detectionSensorDwellElapsedMs(false, 1000, 3000));
+    TEST_ASSERT_EQUAL_UINT32(2000, detectionSensorDwellElapsedMs(true, 1000, 3000));
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -81,6 +87,7 @@ void setup()
     RUN_TEST(test_dwell_immediate_when_zero);
     RUN_TEST(test_dwell_requires_hold_then_confirms);
     RUN_TEST(test_dwell_glitch_resets_timer);
+    RUN_TEST(test_dwell_elapsed_ms);
     exit(UNITY_END());
 }
 
