@@ -96,25 +96,47 @@ int32_t DetectionSensorModule::runOnce()
         return setStartDelay();
     }
 
-    // LOG_DEBUG("Detection Sensor Module: Current pin state: %i", digitalRead(moduleConfig.detection_sensor.monitor_pin));
+    // Sense every poll. Mesh TX throttle must not pause dwell / active-time tracking.
+    const uint32_t nowMs = millis();
+    const bool pinActive = pinIsActive();
+    if (pinActive && !pinWasActive) {
+        pinActiveStartedMs = nowMs;
+    }
+    pinWasActive = pinActive;
 
-    if (!Throttle::isWithinTimespanMs(lastSentToMesh,
-                                      Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
-        const uint32_t nowMs = millis();
-        const bool pinActive = pinIsActive();
-        const bool isDetected = detectionSensorUpdateDwell(pinActive, moduleConfig.detection_sensor.minimum_detect_secs, nowMs,
-                                                           dwellArmed, dwellStartedMs);
-        DetectionSensorTriggerVerdict verdict = handlers[configuredTriggerType()](wasDetected, isDetected);
-        wasDetected = isDetected;
+    const bool isDetected = detectionSensorUpdateDwell(pinActive, moduleConfig.detection_sensor.minimum_detect_secs, nowMs,
+                                                       dwellArmed, dwellStartedMs);
+
+    if (isDetected && !confirmedEpisode) {
+        confirmedEpisode = true;
+        episodeStartMs =
+            detectionSensorEpisodeStartMs(moduleConfig.detection_sensor.minimum_detect_secs, dwellStartedMs, pinActiveStartedMs);
+    }
+
+    if (!pinActive && confirmedEpisode) {
+        pendingActiveMs = detectionSensorActiveMs(episodeStartMs, nowMs);
+        pendingClearReport = true;
+        confirmedEpisode = false;
+    }
+
+    DetectionSensorTriggerVerdict verdict = handlers[configuredTriggerType()](wasDetected, isDetected);
+    wasDetected = isDetected;
+
+    // Clear/active_ms reports bypass broadcast throttle so duration isn't lost during cooldown.
+    if (pendingClearReport) {
+        sendClearedMessage(pendingActiveMs);
+        pendingClearReport = false;
+        return DELAYED_INTERVAL;
+    }
+
+    const bool canSend = !Throttle::isWithinTimespanMs(
+        lastSentToMesh, Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs));
+
+    if (canSend) {
         switch (verdict) {
-        case DetectionSensorVerdictDetected: {
-            // Measured continuous-active time at trip (0 when dwell is disabled).
-            const uint32_t dwellMs = moduleConfig.detection_sensor.minimum_detect_secs > 0
-                                         ? detectionSensorDwellElapsedMs(dwellArmed, dwellStartedMs, nowMs)
-                                         : 0;
-            sendDetectionMessage(dwellMs);
+        case DetectionSensorVerdictDetected:
+            sendDetectionMessage();
             return DELAYED_INTERVAL;
-        }
         case DetectionSensorVerdictSendState:
             sendCurrentStateMessage(isDetected);
             return DELAYED_INTERVAL;
@@ -122,9 +144,8 @@ int32_t DetectionSensorModule::runOnce()
             break;
         }
     }
-    // Even if we haven't detected an event, broadcast our current state to the mesh on the scheduled interval as a sort
-    // of heartbeat. We only do this if the minimum broadcast interval is greater than zero, otherwise we'll only broadcast state
-    // change detections. Heartbeat reports the raw pin (not dwell-confirmed) so operators can see chatter.
+
+    // Heartbeat reports the raw pin (not dwell-confirmed) so operators can see chatter.
     if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
         !Throttle::isWithinTimespanMs(lastSentToMesh,
                                       Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
@@ -135,14 +156,11 @@ int32_t DetectionSensorModule::runOnce()
     return GPIO_POLLING_INTERVAL;
 }
 
-void DetectionSensorModule::sendDetectionMessage(uint32_t dwellMs)
+void DetectionSensorModule::sendDetectionMessage()
 {
     LOG_DEBUG("Detected event observed. Send message");
     char message[64];
-    if (dwellMs > 0)
-        snprintf(message, sizeof(message), "%s detected dwell_ms=%u", moduleConfig.detection_sensor.name, (unsigned)dwellMs);
-    else
-        snprintf(message, sizeof(message), "%s detected", moduleConfig.detection_sensor.name);
+    snprintf(message, sizeof(message), "%s detected", moduleConfig.detection_sensor.name);
     meshtastic_MeshPacket *p = allocDataPacket();
     if (!p) {
         return;
@@ -163,13 +181,12 @@ void DetectionSensorModule::sendDetectionMessage(uint32_t dwellMs)
         LOG_ERROR("Message not allow on Public channel");
 }
 
-void DetectionSensorModule::sendCurrentStateMessage(bool state)
+void DetectionSensorModule::sendClearedMessage(uint32_t activeMs)
 {
-    char *message = new char[40];
-    sprintf(message, "%s state: %i", moduleConfig.detection_sensor.name, state);
+    char message[64];
+    snprintf(message, sizeof(message), "%s cleared active_ms=%u", moduleConfig.detection_sensor.name, (unsigned)activeMs);
     meshtastic_MeshPacket *p = allocDataPacket();
     if (!p) {
-        delete[] message;
         return;
     }
     p->want_ack = false;
@@ -181,7 +198,25 @@ void DetectionSensorModule::sendCurrentStateMessage(bool state)
         service->sendToMesh(p);
     } else
         LOG_ERROR("Message not allow on Public channel");
-    delete[] message;
+}
+
+void DetectionSensorModule::sendCurrentStateMessage(bool state)
+{
+    char message[40];
+    snprintf(message, sizeof(message), "%s state: %i", moduleConfig.detection_sensor.name, state);
+    meshtastic_MeshPacket *p = allocDataPacket();
+    if (!p) {
+        return;
+    }
+    p->want_ack = false;
+    p->decoded.payload.size = strlen(message);
+    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
+    lastSentToMesh = millis();
+    if (!channels.isDefaultChannel(0)) {
+        LOG_INFO("Send message id=%d, dest=%x, msg=%.*s", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+        service->sendToMesh(p);
+    } else
+        LOG_ERROR("Message not allow on Public channel");
 }
 
 bool DetectionSensorModule::pinIsActive()

@@ -32,3 +32,15 @@ inline uint32_t detectionSensorDwellElapsedMs(bool dwellArmed, uint32_t dwellSta
         return 0;
     return nowMs - dwellStartedMs;
 }
+
+// Total presence window for a confirmed episode (first active sample → clear).
+inline uint32_t detectionSensorActiveMs(uint32_t episodeStartMs, uint32_t clearMs)
+{
+    return clearMs - episodeStartMs;
+}
+
+// Episode start: dwell arm time when confirming, else first pin-active sample.
+inline uint32_t detectionSensorEpisodeStartMs(uint32_t minimum_detect_secs, uint32_t dwellStartedMs, uint32_t pinActiveStartedMs)
+{
+    return minimum_detect_secs > 0 ? dwellStartedMs : pinActiveStartedMs;
+}

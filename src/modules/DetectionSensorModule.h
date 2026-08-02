@@ -17,7 +17,15 @@ class DetectionSensorModule : public SinglePortModule, private concurrency::OSTh
     bool wasDetected = false;
     bool dwellArmed = false;
     uint32_t dwellStartedMs = 0;
-    void sendDetectionMessage(uint32_t dwellMs);
+    // Continuous pin-active tracking (independent of mesh TX throttle).
+    bool pinWasActive = false;
+    uint32_t pinActiveStartedMs = 0;
+    bool confirmedEpisode = false;
+    uint32_t episodeStartMs = 0;
+    bool pendingClearReport = false;
+    uint32_t pendingActiveMs = 0;
+    void sendDetectionMessage();
+    void sendClearedMessage(uint32_t activeMs);
     void sendCurrentStateMessage(bool state);
     bool pinIsActive();
 };

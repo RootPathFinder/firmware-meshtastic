@@ -78,6 +78,16 @@ void test_dwell_elapsed_ms(void)
     TEST_ASSERT_EQUAL_UINT32(2000, detectionSensorDwellElapsedMs(true, 1000, 3000));
 }
 
+void test_active_ms_spans_full_presence(void)
+{
+    // Pin high at t=1000, confirms after 2s dwell, clears at t=5500 → 4500ms presence.
+    TEST_ASSERT_EQUAL_UINT32(1000, detectionSensorEpisodeStartMs(2, 1000, 1000));
+    TEST_ASSERT_EQUAL_UINT32(4500, detectionSensorActiveMs(1000, 5500));
+    // No dwell: episode starts at first pin-active sample.
+    TEST_ASSERT_EQUAL_UINT32(900, detectionSensorEpisodeStartMs(0, 0, 900));
+    TEST_ASSERT_EQUAL_UINT32(1100, detectionSensorActiveMs(900, 2000));
+}
+
 void setup()
 {
     initializeTestEnvironment();
@@ -88,6 +98,7 @@ void setup()
     RUN_TEST(test_dwell_requires_hold_then_confirms);
     RUN_TEST(test_dwell_glitch_resets_timer);
     RUN_TEST(test_dwell_elapsed_ms);
+    RUN_TEST(test_active_ms_spans_full_presence);
     exit(UNITY_END());
 }
 
