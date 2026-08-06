@@ -20,6 +20,8 @@ class DetectionSensorModule : public SinglePortModule, private concurrency::OSTh
     bool pinWasActive = false;
     uint32_t pinActiveStartedMs = 0;
     DetectionSensorBurstState burst;
+    // True only when an alert was actually mesh-sent for the current burst.
+    bool alertSentToMeshThisBurst = false;
     void sendDetectionMessage(uint32_t burstMs);
     void sendClearedMessage(uint32_t activeMs, uint32_t burstMs);
     void sendCurrentStateMessage(bool state);

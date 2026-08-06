@@ -74,14 +74,27 @@ int32_t DetectionSensorModule::runOnce()
         detectionSensorUpdateBurst(pinActive, dwellConfirmed, nowMs, moduleConfig.detection_sensor.burst_gap_secs,
                                    moduleConfig.detection_sensor.minimum_alert_secs, burstStartCandidate, burst);
 
-    // Alert/clear are one-shot per burst; bypass broadcast throttle so persistence alerts aren't dropped.
+    const bool canSendAlert = !Throttle::isWithinTimespanMs(
+        lastSentToMesh, Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs));
+
+    // Alerts honor minimum_broadcast_secs (cooldown between trips). Clear still sends for a
+    // burst we actually alerted on, so duration isn't lost to the same cooldown window.
     if (burstOut.event == DetectionSensorBurstEventAlert) {
-        sendDetectionMessage(burstOut.burstMs);
-        return DELAYED_INTERVAL;
+        if (canSendAlert) {
+            sendDetectionMessage(burstOut.burstMs);
+            alertSentToMeshThisBurst = true;
+            return DELAYED_INTERVAL;
+        }
+        alertSentToMeshThisBurst = false;
+        LOG_DEBUG("Detection alert suppressed (broadcast cooldown)");
     }
     if (burstOut.event == DetectionSensorBurstEventCleared) {
-        sendClearedMessage(burstOut.activeMs, burstOut.burstMs);
-        return DELAYED_INTERVAL;
+        if (alertSentToMeshThisBurst) {
+            sendClearedMessage(burstOut.activeMs, burstOut.burstMs);
+            alertSentToMeshThisBurst = false;
+            return DELAYED_INTERVAL;
+        }
+        alertSentToMeshThisBurst = false;
     }
 
     if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&

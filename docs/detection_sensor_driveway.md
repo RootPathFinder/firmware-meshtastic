@@ -18,9 +18,13 @@ Common extras:
 detection_sensor.enabled = true
 detection_sensor.name = Driveway
 detection_sensor.detection_trigger_type = RISING_EDGE
-detection_sensor.minimum_broadcast_secs = 30
+detection_sensor.minimum_broadcast_secs = 30   # cooldown between mesh alerts
 detection_sensor.state_broadcast_secs = 0
 ```
+
+`minimum_broadcast_secs` is the **alert cooldown**: after a mesh `detected`, further bursts
+are ignored until that many seconds pass. The matching `cleared` for a sent alert is still
+delivered so duration is available.
 
 ## Profile A - alert on walk-by **and** car (reject blips only)
 
