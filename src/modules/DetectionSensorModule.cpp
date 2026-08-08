@@ -33,6 +33,7 @@ int32_t DetectionSensorModule::runOnce()
     // moduleConfig.detection_sensor.minimum_detect_secs = 1; // ignore sub-1s glitches
     // moduleConfig.detection_sensor.burst_gap_secs = 3;      // coalesce radar retriggers
     // moduleConfig.detection_sensor.minimum_alert_secs = 8;  // persistence before alert
+    // moduleConfig.detection_sensor.send_clear = true;       // optional cleared timing msg
     // strcpy(moduleConfig.detection_sensor.name, "Driveway");
 
     if (moduleConfig.detection_sensor.enabled == false)
@@ -77,8 +78,8 @@ int32_t DetectionSensorModule::runOnce()
     const bool canSendAlert = !Throttle::isWithinTimespanMs(
         lastSentToMesh, Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs));
 
-    // Alerts honor minimum_broadcast_secs (cooldown between trips). Clear still sends for a
-    // burst we actually alerted on, so duration isn't lost to the same cooldown window.
+    // Alerts honor minimum_broadcast_secs (cooldown between trips). Optional clear (send_clear)
+    // still sends for a burst we alerted on, so duration isn't lost to the same cooldown.
     if (burstOut.event == DetectionSensorBurstEventAlert) {
         if (canSendAlert) {
             sendDetectionMessage(burstOut.burstMs);
@@ -89,7 +90,7 @@ int32_t DetectionSensorModule::runOnce()
         LOG_DEBUG("Detection alert suppressed (broadcast cooldown)");
     }
     if (burstOut.event == DetectionSensorBurstEventCleared) {
-        if (alertSentToMeshThisBurst) {
+        if (alertSentToMeshThisBurst && moduleConfig.detection_sensor.send_clear) {
             sendClearedMessage(burstOut.activeMs, burstOut.burstMs);
             alertSentToMeshThisBurst = false;
             return DELAYED_INTERVAL;

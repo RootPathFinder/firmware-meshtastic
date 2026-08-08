@@ -16,6 +16,7 @@ void test_minimum_detect_secs_defaults_zero(void)
     TEST_ASSERT_EQUAL_UINT32(0, cfg.minimum_detect_secs);
     TEST_ASSERT_EQUAL_UINT32(0, cfg.burst_gap_secs);
     TEST_ASSERT_EQUAL_UINT32(0, cfg.minimum_alert_secs);
+    TEST_ASSERT_FALSE(cfg.send_clear);
 }
 
 void test_new_fields_roundtrip(void)
@@ -25,6 +26,7 @@ void test_new_fields_roundtrip(void)
     cfg.minimum_detect_secs = 1;
     cfg.burst_gap_secs = 3;
     cfg.minimum_alert_secs = 8;
+    cfg.send_clear = true;
     cfg.monitor_pin = 21;
 
     uint8_t buf[64];
@@ -36,6 +38,7 @@ void test_new_fields_roundtrip(void)
     TEST_ASSERT_EQUAL_UINT32(1, decoded.minimum_detect_secs);
     TEST_ASSERT_EQUAL_UINT32(3, decoded.burst_gap_secs);
     TEST_ASSERT_EQUAL_UINT32(8, decoded.minimum_alert_secs);
+    TEST_ASSERT_TRUE(decoded.send_clear);
 }
 
 void test_dwell_immediate_when_zero(void)

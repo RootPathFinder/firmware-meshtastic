@@ -227,6 +227,10 @@ typedef struct _meshtastic_ModuleConfig_DetectionSensorConfig {
     /* Wall-clock seconds of persistent motion required before broadcasting an
  alert. 0 = alert when the burst first confirms (legacy). */
     uint32_t minimum_alert_secs;
+    /* When true, after a mesh alert was sent for a burst, also send a
+ "<name> cleared active_ms=… burst_ms=…" message when the burst ends.
+ Off by default (alert-only). */
+    bool send_clear;
 } meshtastic_ModuleConfig_DetectionSensorConfig;
 
 /* Audio Config for codec2 voice */
@@ -685,7 +689,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_MapReportSettings_init_default {0, 0, 0}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_default {0, 0, 0, {meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default}}
 #define meshtastic_ModuleConfig_NeighborInfoConfig_init_default {0, 0, 0}
-#define meshtastic_ModuleConfig_DetectionSensorConfig_init_default {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_DetectionSensorConfig_init_default {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_TrafficManagementConfig_init_default {0, 0, 0, 0, 0}
@@ -706,7 +710,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_MapReportSettings_init_zero {0, 0, 0}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_zero {0, 0, 0, {meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero}}
 #define meshtastic_ModuleConfig_NeighborInfoConfig_init_zero {0, 0, 0}
-#define meshtastic_ModuleConfig_DetectionSensorConfig_init_zero {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_DetectionSensorConfig_init_zero {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_TrafficManagementConfig_init_zero {0, 0, 0, 0, 0}
@@ -752,6 +756,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_DetectionSensorConfig_minimum_detect_secs_tag 9
 #define meshtastic_ModuleConfig_DetectionSensorConfig_burst_gap_secs_tag 10
 #define meshtastic_ModuleConfig_DetectionSensorConfig_minimum_alert_secs_tag 11
+#define meshtastic_ModuleConfig_DetectionSensorConfig_send_clear_tag 12
 #define meshtastic_ModuleConfig_AudioConfig_codec2_enabled_tag 1
 #define meshtastic_ModuleConfig_AudioConfig_ptt_pin_tag 2
 #define meshtastic_ModuleConfig_AudioConfig_bitrate_tag 3
@@ -962,7 +967,8 @@ X(a, STATIC,   SINGULAR, UENUM,    detection_trigger_type,   7) \
 X(a, STATIC,   SINGULAR, BOOL,     use_pullup,        8) \
 X(a, STATIC,   SINGULAR, UINT32,   minimum_detect_secs,   9) \
 X(a, STATIC,   SINGULAR, UINT32,   burst_gap_secs,   10) \
-X(a, STATIC,   SINGULAR, UINT32,   minimum_alert_secs,   11)
+X(a, STATIC,   SINGULAR, UINT32,   minimum_alert_secs,   11) \
+X(a, STATIC,   SINGULAR, BOOL,     send_clear,       12)
 #define meshtastic_ModuleConfig_DetectionSensorConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_DetectionSensorConfig_DEFAULT NULL
 
@@ -1180,7 +1186,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_AmbientLightingConfig_size 14
 #define meshtastic_ModuleConfig_AudioConfig_size 19
 #define meshtastic_ModuleConfig_CannedMessageConfig_size 49
-#define meshtastic_ModuleConfig_DetectionSensorConfig_size 63
+#define meshtastic_ModuleConfig_DetectionSensorConfig_size 65
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_size 42
 #define meshtastic_ModuleConfig_MQTTConfig_size  224
 #define meshtastic_ModuleConfig_MapReportSettings_size 14
