@@ -12,6 +12,7 @@ def readProps(prefsLoc):
     version = dict(config.items("VERSION"))
     verObj = dict(
         short="{}.{}.{}".format(version["major"], version["minor"], version["build"]),
+        build="unset",
         long="unset",
         deb="unset",
     )
@@ -31,8 +32,14 @@ def readProps(prefsLoc):
         # if isDirty:
         #     # short for 'dirty', we want to keep our verstrings source for protobuf reasons
         #     suffix = sha + "-d"
-        verObj["long"] = "{}.{}".format(verObj["short"], suffix)
-        verObj["deb"] = "{}.{}~{}{}".format(verObj["short"], run_number, build_location, sha)
+        verObj["build"] = suffix
+        # major.minor.build from version.properties, then git revision as its own dotted segment
+        verObj["long"] = "{}.{}.{}.{}".format(
+            version["major"], version["minor"], version["build"], suffix
+        )
+        verObj["deb"] = "{}.{}~{}.{}".format(
+            verObj["short"], run_number, build_location, sha
+        )
     except:
         # print("Unexpected error:", sys.exc_info()[0])
         # traceback.print_exc()
