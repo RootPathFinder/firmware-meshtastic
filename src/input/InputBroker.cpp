@@ -58,6 +58,10 @@ ButtonThread *BackButtonThread = nullptr;
 ButtonThread *CancelButtonThread = nullptr;
 #endif
 
+#if defined(DOWN_BUTTON_PIN)
+ButtonThread *DownButtonThread = nullptr;
+#endif
+
 #endif
 
 InputBroker *inputBroker = nullptr;
@@ -323,6 +327,28 @@ void InputBroker::Init()
     BackButtonThread->initButton(backConfig);
 #endif
 
+#if defined(DOWN_BUTTON_PIN)
+    // Sends literal INPUT_BROKER_DOWN/DOWN_LONG (needed for message/nodelist scroll),
+    // unlike ALT_BUTTON_PIN which sends ALT_PRESS/ALT_LONG (treated as UP/previous).
+    DownButtonThread = new ButtonThread("DownButton");
+    ButtonConfig downConfig;
+    downConfig.pinNumber = DOWN_BUTTON_PIN;
+    downConfig.activeLow = DOWN_BUTTON_ACTIVE_LOW;
+    downConfig.activePullup = DOWN_BUTTON_ACTIVE_PULLUP;
+    downConfig.pullupSense = pullup_sense;
+    downConfig.intRoutine = []() {
+        DownButtonThread->userButton.tick();
+        DownButtonThread->setIntervalFromNow(0);
+        runASAP = true;
+        BaseType_t higherWake = 0;
+        concurrency::mainDelay.interruptFromISR(&higherWake);
+    };
+    downConfig.singlePress = INPUT_BROKER_DOWN;
+    downConfig.longPress = INPUT_BROKER_DOWN_LONG;
+    downConfig.longPressTime = 500;
+    DownButtonThread->initButton(downConfig);
+#endif
+
 #if defined(BUTTON_PIN)
 #if defined(USERPREFS_BUTTON_PIN)
     int _pinNum = config.device.button_gpio ? config.device.button_gpio : USERPREFS_BUTTON_PIN;
@@ -356,7 +382,7 @@ void InputBroker::Init()
         userConfig.singlePress = INPUT_BROKER_SEND_PING;
         userConfig.longPress = INPUT_BROKER_SHUTDOWN;
         userConfig.longPressTime = 5000;
-        userConfig.doublePress = INPUT_BROKER_GPS_TOGGLE;
+        userConfig.doublePress = INPUT_BROKER_PRIVACY_TOGGLE;
         UserButtonThread->initButton(userConfig);
     }
 #else
