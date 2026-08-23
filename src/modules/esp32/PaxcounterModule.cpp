@@ -46,7 +46,11 @@ void PaxcounterModule::handleMacSeen(const uint8_t mac[6], int rssi, int kind)
     if (!paxcounterModule || !moduleConfig.paxcounter.report_ids)
         return;
 
-    auto k = (kind == LIBPAX_MAC_KIND_WIFI_AP) ? meshtastic_PaxSighting_Kind_WIFI_AP : meshtastic_PaxSighting_Kind_WIFI_CLIENT;
+    meshtastic_PaxSighting_Kind k = meshtastic_PaxSighting_Kind_WIFI_CLIENT;
+    if (kind == LIBPAX_MAC_KIND_WIFI_AP)
+        k = meshtastic_PaxSighting_Kind_WIFI_AP;
+    else if (kind == LIBPAX_MAC_KIND_BLE)
+        k = meshtastic_PaxSighting_Kind_BLE;
 
     portENTER_CRITICAL(&paxcounterModule->sightingsMux);
     for (size_t i = 0; i < paxcounterModule->sightingCount; i++) {
@@ -200,7 +204,7 @@ int32_t PaxcounterModule::runOnce()
 
             if (moduleConfig.paxcounter.report_ids) {
                 libpax_set_mac_callback(handleMacSeen);
-                LOG_INFO("PaxcounterModule: report_ids enabled, collecting WiFi MAC/BSSID sightings");
+                LOG_INFO("PaxcounterModule: report_ids enabled, collecting WiFi/BLE MAC sightings");
             }
 
             // internal processing initialization

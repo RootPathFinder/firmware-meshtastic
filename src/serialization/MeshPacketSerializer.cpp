@@ -393,8 +393,12 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                                  decoded->sightings[i].mac[1], decoded->sightings[i].mac[2], decoded->sightings[i].mac[3],
                                  decoded->sightings[i].mac[4], decoded->sightings[i].mac[5]);
                         s["mac"] = macStr;
-                        s["kind"] =
-                            (decoded->sightings[i].kind == meshtastic_PaxSighting_Kind_WIFI_AP) ? "wifi_ap" : "wifi_client";
+                        if (decoded->sightings[i].kind == meshtastic_PaxSighting_Kind_WIFI_AP)
+                            s["kind"] = "wifi_ap";
+                        else if (decoded->sightings[i].kind == meshtastic_PaxSighting_Kind_BLE)
+                            s["kind"] = "ble";
+                        else
+                            s["kind"] = "wifi_client";
                         s["rssi"] = (Json::Int)decoded->sightings[i].rssi;
                         sightings.append(s);
                     }

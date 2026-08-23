@@ -116,11 +116,12 @@ void libpax_default_config(struct libpax_config_t *configuration);
 /* Kind values for libpax_mac_callback_t */
 #define LIBPAX_MAC_KIND_WIFI_CLIENT 0
 #define LIBPAX_MAC_KIND_WIFI_AP 1
+#define LIBPAX_MAC_KIND_BLE 2
 
 /**
- * Optional callback invoked for each WiFi frame that passes the RSSI filter.
+ * Optional callback invoked for each WiFi/BLE address that passes the RSSI filter.
  * Not filtered to locally-administered MACs (unlike the count path).
- * Must be lightweight; may be called from the WiFi RX task.
+ * Must be lightweight; may be called from WiFi RX or BLE HCI task context.
  */
 typedef void (*libpax_mac_callback_t)(const uint8_t mac[6], int rssi, int kind);
 

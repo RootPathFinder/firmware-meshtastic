@@ -246,8 +246,8 @@ typedef struct _meshtastic_ModuleConfig_PaxcounterConfig {
     int32_t wifi_threshold;
     /* BLE RSSI threshold. Defaults to -80 */
     int32_t ble_threshold;
-    /* When true, mesh-broadcast unique WiFi client MACs and AP BSSIDs
- (chunked) in addition to the wifi/ble counts. Default false. */
+    /* When true, mesh-broadcast unique WiFi client MACs, AP BSSIDs, and
+ BLE addresses (chunked) in addition to the wifi/ble counts. Default false. */
     bool report_ids;
 } meshtastic_ModuleConfig_PaxcounterConfig;
 
