@@ -32,18 +32,26 @@ extern "C" {
 /* Scan commands */
 #define HCI_BLE_WRITE_SCAN_PARAM (0x000B | HCI_GRP_BLE_CMDS)
 #define HCI_BLE_WRITE_SCAN_ENABLE (0x000C | HCI_GRP_BLE_CMDS)
+#define HCI_BLE_SET_EVENT_MASK (0x0001 | HCI_GRP_BLE_CMDS)
+#define HCI_BLE_SET_EXT_SCAN_PARAMS (0x0041 | HCI_GRP_BLE_CMDS)
+#define HCI_BLE_SET_EXT_SCAN_ENABLE (0x0042 | HCI_GRP_BLE_CMDS)
 
 /* HCI Command length. */
 #define HCIC_PARAM_SIZE_WRITE_ADV_ENABLE 1
 #define HCIC_PARAM_SIZE_BLE_WRITE_ADV_PARAMS 15
 #define HCIC_PARAM_SIZE_BLE_WRITE_ADV_DATA 31
 #define HCIC_PARAM_SIZE_SET_EVENT_MASK (8)
+#define HCIC_PARAM_SIZE_BLE_SET_EVENT_MASK (8)
 #define HCIC_PARAM_SIZE_BLE_WRITE_SCAN_PARAM (7)
 #define HCIC_PARAM_SIZE_BLE_WRITE_SCAN_ENABLE (2)
+/* Own_Address_Type + Filter_Policy + Scanning_PHYs + one PHY (1M): type/interval/window */
+#define HCIC_PARAM_SIZE_BLE_SET_EXT_SCAN_PARAMS (8)
+#define HCIC_PARAM_SIZE_BLE_SET_EXT_SCAN_ENABLE (6)
 
 /* LE Meta Events. */
 #define LE_META_EVENTS (0x3E)
 #define HCI_LE_ADV_REPORT (0x02)
+#define HCI_LE_EXT_ADV_REPORT (0x0D)
 
 #define BD_ADDR_LEN (6)                 /* Device address length */
 typedef uint8_t bd_addr_t[BD_ADDR_LEN]; /* Device address */
@@ -158,6 +166,23 @@ uint16_t make_cmd_ble_set_scan_params(uint8_t *buf, uint8_t scan_type, uint16_t 
  * @return  Size of buf after writing into it.
  */
 uint16_t make_cmd_ble_set_scan_enable(uint8_t *buf, uint8_t scan_enable, uint8_t filter_duplicates);
+
+/**
+ * @brief LE Set Event Mask (enables LE Extended Advertising Report, etc.).
+ */
+uint16_t make_cmd_ble_set_event_mask(uint8_t *buf, uint8_t *le_evt_mask);
+
+/**
+ * @brief LE Set Extended Scan Parameters for a single primary PHY (1M).
+ */
+uint16_t make_cmd_ble_set_ext_scan_params(uint8_t *buf, uint8_t own_addr_type, uint8_t filter_policy, uint8_t scan_type,
+                                          uint16_t scan_interval, uint16_t scan_window);
+
+/**
+ * @brief LE Set Extended Scan Enable.
+ */
+uint16_t make_cmd_ble_set_ext_scan_enable(uint8_t *buf, uint8_t enable, uint8_t filter_duplicates, uint16_t duration,
+                                          uint16_t period);
 
 #ifdef __cplusplus
 }
