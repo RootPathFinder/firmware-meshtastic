@@ -25,12 +25,23 @@ void test_paxcount_full_chunk_encodes_under_payload_len(void)
     pl.sighting_count = 64;
     pl.chunk_index = 3;
     pl.chunk_total = 7;
-    pl.sightings_count = 10;
+    pl.sightings_count = 8;
     for (pb_size_t i = 0; i < pl.sightings_count; i++) {
         for (int b = 0; b < 6; b++)
             pl.sightings[i].mac[b] = (uint8_t)(i * 16 + b);
-        pl.sightings[i].kind = (i & 1) ? meshtastic_PaxSighting_Kind_WIFI_AP : meshtastic_PaxSighting_Kind_WIFI_CLIENT;
+        static const meshtastic_PaxSighting_Kind kinds[] = {
+            meshtastic_PaxSighting_Kind_WIFI_CLIENT, meshtastic_PaxSighting_Kind_WIFI_AP,     meshtastic_PaxSighting_Kind_BLE,
+            meshtastic_PaxSighting_Kind_BLE_APPLE,   meshtastic_PaxSighting_Kind_BLE_ANDROID,
+        };
+        pl.sightings[i].kind = kinds[i % 5];
         pl.sightings[i].rssi = -40 - (int32_t)i;
+        if (i >= 2) {
+            pl.sightings[i].fingerprint.size = 4;
+            pl.sightings[i].fingerprint.bytes[0] = (uint8_t)(0xA0 + i);
+            pl.sightings[i].fingerprint.bytes[1] = 0x11;
+            pl.sightings[i].fingerprint.bytes[2] = 0x22;
+            pl.sightings[i].fingerprint.bytes[3] = 0x33;
+        }
     }
 
     uint8_t buf[meshtastic_Constants_DATA_PAYLOAD_LEN];
@@ -47,7 +58,11 @@ void test_paxcount_full_chunk_encodes_under_payload_len(void)
     TEST_ASSERT_EQUAL_UINT32(pl.chunk_total, decoded.chunk_total);
     TEST_ASSERT_EQUAL_UINT32(pl.sightings_count, decoded.sightings_count);
     TEST_ASSERT_EQUAL_UINT8_ARRAY(pl.sightings[0].mac, decoded.sightings[0].mac, 6);
-    TEST_ASSERT_EQUAL_INT32(pl.sightings[9].rssi, decoded.sightings[9].rssi);
+    TEST_ASSERT_EQUAL_INT32(pl.sightings[7].rssi, decoded.sightings[7].rssi);
+    TEST_ASSERT_EQUAL_INT32(meshtastic_PaxSighting_Kind_BLE, decoded.sightings[2].kind);
+    TEST_ASSERT_EQUAL_INT32(meshtastic_PaxSighting_Kind_BLE_APPLE, decoded.sightings[3].kind);
+    TEST_ASSERT_EQUAL_UINT32(4, decoded.sightings[3].fingerprint.size);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(pl.sightings[3].fingerprint.bytes, decoded.sightings[3].fingerprint.bytes, 4);
 }
 
 void test_report_ids_defaults_false(void)

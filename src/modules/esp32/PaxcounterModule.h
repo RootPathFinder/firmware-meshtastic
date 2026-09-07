@@ -14,12 +14,14 @@
 class PaxcounterModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Paxcount>
 {
     static constexpr size_t MAX_SIGHTINGS = 64;
-    static constexpr size_t SIGHTINGS_PER_CHUNK = 10; // matches Paxcount.sightings max_count
+    static constexpr size_t SIGHTINGS_PER_CHUNK = 8; // matches Paxcount.sightings max_count
 
     struct SightingEntry {
         uint8_t mac[6];
         meshtastic_PaxSighting_Kind kind;
         int32_t rssi;
+        uint8_t fingerprint[4];
+        uint8_t fingerprint_len;
     };
 
     bool firstTime = true;
@@ -30,7 +32,7 @@ class PaxcounterModule : private concurrency::OSThread, public ProtobufModule<me
     portMUX_TYPE sightingsMux = portMUX_INITIALIZER_UNLOCKED;
 
     static void handlePaxCounterReportRequest();
-    static void handleMacSeen(const uint8_t mac[6], int rssi, int kind);
+    static void handleMacSeen(const uint8_t mac[6], int rssi, int kind, const uint8_t *adv_data, uint8_t adv_len);
 
     void fillCounts(meshtastic_Paxcount &pl) const;
     bool sendChunk(NodeNum dest, const meshtastic_Paxcount &pl);

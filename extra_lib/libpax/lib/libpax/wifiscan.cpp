@@ -61,9 +61,9 @@ static IRAM_ATTR void wifi_sniffer_packet_handler(void *buff, wifi_promiscuous_p
         const unsigned frame_subtype = (fc >> 4) & 0xf;
         // Management beacon (8) or probe response (5) -> AP BSSID
         if (frame_type == 0 && (frame_subtype == 8 || frame_subtype == 5)) {
-            libpax_mac_callback(hdr->addr3, rssi, LIBPAX_MAC_KIND_WIFI_AP);
+            libpax_mac_callback(hdr->addr3, rssi, LIBPAX_MAC_KIND_WIFI_AP, NULL, 0);
         } else {
-            libpax_mac_callback(hdr->addr2, rssi, LIBPAX_MAC_KIND_WIFI_CLIENT);
+            libpax_mac_callback(hdr->addr2, rssi, LIBPAX_MAC_KIND_WIFI_CLIENT, NULL, 0);
         }
     }
 }

@@ -41,19 +41,101 @@ static void ensureDefaultEventLoop()
 
 PaxcounterModule *paxcounterModule;
 
-void PaxcounterModule::handleMacSeen(const uint8_t mac[6], int rssi, int kind)
+static uint32_t fnv1a32(const uint8_t *data, size_t len)
+{
+    uint32_t h = 2166136261u;
+    for (size_t i = 0; i < len; i++) {
+        h ^= data[i];
+        h *= 16777619u;
+    }
+    return h;
+}
+
+// Classify BLE adv payload: Apple/Android hints + soft fingerprint from mfg data.
+static void classifyBleAdv(const uint8_t *adv, uint8_t adv_len, meshtastic_PaxSighting_Kind *kindOut, uint8_t fpOut[4],
+                           uint8_t *fpLenOut)
+{
+    *kindOut = meshtastic_PaxSighting_Kind_BLE;
+    *fpLenOut = 0;
+    if (!adv || !adv_len)
+        return;
+
+    size_t i = 0;
+    while (i < adv_len) {
+        uint8_t alen = adv[i];
+        if (alen == 0 || i + 1 + alen > adv_len)
+            break;
+        uint8_t type = adv[i + 1];
+        const uint8_t *data = &adv[i + 2];
+        uint8_t dlen = alen - 1;
+
+        if (type == 0xFF && dlen >= 2) { // Manufacturer Specific Data
+            uint16_t company = (uint16_t)data[0] | ((uint16_t)data[1] << 8);
+            if (company == 0x004C) {
+                *kindOut = meshtastic_PaxSighting_Kind_BLE_APPLE;
+            } else if (company == 0x00E0 || company == 0x0075 || company == 0x0006) {
+                // Google Fast Pair / Samsung / Microsoft (common phone OEMs)
+                *kindOut = meshtastic_PaxSighting_Kind_BLE_ANDROID;
+            }
+            if (dlen >= 3 && *fpLenOut == 0) {
+                uint32_t h = fnv1a32(data, dlen);
+                fpOut[0] = (uint8_t)(h >> 24);
+                fpOut[1] = (uint8_t)(h >> 16);
+                fpOut[2] = (uint8_t)(h >> 8);
+                fpOut[3] = (uint8_t)h;
+                *fpLenOut = 4;
+            }
+        } else if ((type == 0x16 || type == 0x21) && dlen >= 2 && *kindOut == meshtastic_PaxSighting_Kind_BLE) {
+            // Service Data - Google exposure/nearby-ish UUIDs often on Android
+            uint16_t uuid = (uint16_t)data[0] | ((uint16_t)data[1] << 8);
+            if (uuid == 0xFE2C || uuid == 0xFE9F || uuid == 0xFCF1) {
+                *kindOut = meshtastic_PaxSighting_Kind_BLE_ANDROID;
+                if (dlen >= 3 && *fpLenOut == 0) {
+                    uint32_t h = fnv1a32(data, dlen);
+                    fpOut[0] = (uint8_t)(h >> 24);
+                    fpOut[1] = (uint8_t)(h >> 16);
+                    fpOut[2] = (uint8_t)(h >> 8);
+                    fpOut[3] = (uint8_t)h;
+                    *fpLenOut = 4;
+                }
+            }
+        }
+        i += (size_t)alen + 1;
+    }
+}
+
+void PaxcounterModule::handleMacSeen(const uint8_t mac[6], int rssi, int kind, const uint8_t *adv_data, uint8_t adv_len)
 {
     if (!paxcounterModule || !moduleConfig.paxcounter.report_ids)
         return;
 
-    auto k = (kind == LIBPAX_MAC_KIND_WIFI_AP) ? meshtastic_PaxSighting_Kind_WIFI_AP : meshtastic_PaxSighting_Kind_WIFI_CLIENT;
+    meshtastic_PaxSighting_Kind k = meshtastic_PaxSighting_Kind_WIFI_CLIENT;
+    uint8_t fp[4] = {};
+    uint8_t fpLen = 0;
+    if (kind == LIBPAX_MAC_KIND_WIFI_AP)
+        k = meshtastic_PaxSighting_Kind_WIFI_AP;
+    else if (kind == LIBPAX_MAC_KIND_BLE)
+        classifyBleAdv(adv_data, adv_len, &k, fp, &fpLen);
 
     portENTER_CRITICAL(&paxcounterModule->sightingsMux);
     for (size_t i = 0; i < paxcounterModule->sightingCount; i++) {
         SightingEntry &e = paxcounterModule->sightings[i];
-        if (e.kind == k && memcmp(e.mac, mac, 6) == 0) {
+        bool same = false;
+        if (fpLen && e.fingerprint_len == fpLen && memcmp(e.fingerprint, fp, fpLen) == 0) {
+            // Same soft id across rotating BLE random addresses
+            same = true;
+        } else if (e.kind == k && memcmp(e.mac, mac, 6) == 0) {
+            same = true;
+        }
+        if (same) {
+            memcpy(e.mac, mac, 6);
+            e.kind = k;
             if (rssi > e.rssi)
                 e.rssi = rssi;
+            if (fpLen) {
+                memcpy(e.fingerprint, fp, fpLen);
+                e.fingerprint_len = fpLen;
+            }
             portEXIT_CRITICAL(&paxcounterModule->sightingsMux);
             return;
         }
@@ -63,6 +145,9 @@ void PaxcounterModule::handleMacSeen(const uint8_t mac[6], int rssi, int kind)
         memcpy(e.mac, mac, 6);
         e.kind = k;
         e.rssi = rssi;
+        e.fingerprint_len = fpLen;
+        if (fpLen)
+            memcpy(e.fingerprint, fp, fpLen);
     }
     portEXIT_CRITICAL(&paxcounterModule->sightingsMux);
 }
@@ -156,6 +241,9 @@ bool PaxcounterModule::sendInfo(NodeNum dest)
             memcpy(pl.sightings[i].mac, local[start + i].mac, 6);
             pl.sightings[i].kind = local[start + i].kind;
             pl.sightings[i].rssi = local[start + i].rssi;
+            pl.sightings[i].fingerprint.size = local[start + i].fingerprint_len;
+            if (local[start + i].fingerprint_len)
+                memcpy(pl.sightings[i].fingerprint.bytes, local[start + i].fingerprint, local[start + i].fingerprint_len);
         }
 
         if (!sendChunk(dest, pl))
@@ -200,7 +288,7 @@ int32_t PaxcounterModule::runOnce()
 
             if (moduleConfig.paxcounter.report_ids) {
                 libpax_set_mac_callback(handleMacSeen);
-                LOG_INFO("PaxcounterModule: report_ids enabled, collecting WiFi MAC/BSSID sightings");
+                LOG_INFO("PaxcounterModule: report_ids enabled, collecting WiFi/BLE MAC sightings");
             }
 
             // internal processing initialization
