@@ -217,6 +217,20 @@ typedef struct _meshtastic_ModuleConfig_DetectionSensorConfig {
     /* Whether or not use INPUT_PULLUP mode for GPIO pin
  Only applicable if the board uses pull-up resistors on the pin */
     bool use_pullup;
+    /* Require the monitor pin to remain in the active state for this many
+ seconds before a detection is accepted. 0 = immediate (legacy behavior).
+ Useful for filtering brief false trips from Doppler radar / PIR sensors. */
+    uint32_t minimum_detect_secs;
+    /* How long the pin must stay inactive before a motion burst ends.
+ 0 = end on first inactive sample (legacy). */
+    uint32_t burst_gap_secs;
+    /* Wall-clock seconds of persistent motion required before broadcasting an
+ alert. 0 = alert when the burst first confirms (legacy). */
+    uint32_t minimum_alert_secs;
+    /* When true, after a mesh alert was sent for a burst, also send a
+ "<name> cleared active_ms=… burst_ms=…" message when the burst ends.
+ Off by default (alert-only). */
+    bool send_clear;
 } meshtastic_ModuleConfig_DetectionSensorConfig;
 
 /* Audio Config for codec2 voice */
@@ -246,9 +260,6 @@ typedef struct _meshtastic_ModuleConfig_PaxcounterConfig {
     int32_t wifi_threshold;
     /* BLE RSSI threshold. Defaults to -80 */
     int32_t ble_threshold;
-    /* When true, mesh-broadcast unique WiFi client MACs and AP BSSIDs
- (chunked) in addition to the wifi/ble counts. Default false. */
-    bool report_ids;
 } meshtastic_ModuleConfig_PaxcounterConfig;
 
 /* Config for the Traffic Management module.
@@ -500,7 +511,7 @@ typedef struct _meshtastic_ModuleConfig_MeshBeaconConfig {
     /* Single-target TX channel: channel settings (name + PSK) to send beacons on.
  If unset, beacons go out on the primary channel. Used only when broadcast_targets is empty.
  NOTE: the single-target path embeds the ChannelSettings inline here, whereas a
- broadcast_targets entry references a channel-table slot by channel_index instead — see
+ broadcast_targets entry references a channel-table slot by channel_index instead - see
  BroadcastTarget. The two paths are equal, first-class options; only this representation differs. */
     bool has_broadcast_on_channel;
     meshtastic_ChannelSettings broadcast_on_channel;
@@ -517,7 +528,7 @@ typedef struct _meshtastic_ModuleConfig_MeshBeaconConfig {
  each temporarily switching the radio to that entry's preset/region/channel.
  When empty, the broadcaster uses the scalar broadcast_on_preset / broadcast_on_region /
  broadcast_on_channel fields instead (the single-target path).
- Single- and multi-target are equal, first-class options — neither is preferred or
+ Single- and multi-target are equal, first-class options - neither is preferred or
  deprecated. They differ only in how the TX channel is named: broadcast_on_channel embeds a
  ChannelSettings inline, while a target references an existing channel-table slot by
  channel_index (see BroadcastTarget). */
@@ -675,9 +686,9 @@ extern "C" {
 #define meshtastic_ModuleConfig_MapReportSettings_init_default {0, 0, 0}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_default {0, 0, 0, {meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default}}
 #define meshtastic_ModuleConfig_NeighborInfoConfig_init_default {0, 0, 0}
-#define meshtastic_ModuleConfig_DetectionSensorConfig_init_default {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0}
+#define meshtastic_ModuleConfig_DetectionSensorConfig_init_default {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
-#define meshtastic_ModuleConfig_PaxcounterConfig_init_default {0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_PaxcounterConfig_init_default {0, 0, 0, 0}
 #define meshtastic_ModuleConfig_TrafficManagementConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -696,9 +707,9 @@ extern "C" {
 #define meshtastic_ModuleConfig_MapReportSettings_init_zero {0, 0, 0}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_zero {0, 0, 0, {meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero}}
 #define meshtastic_ModuleConfig_NeighborInfoConfig_init_zero {0, 0, 0}
-#define meshtastic_ModuleConfig_DetectionSensorConfig_init_zero {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0}
+#define meshtastic_ModuleConfig_DetectionSensorConfig_init_zero {0, 0, 0, 0, "", 0, _meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MIN, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
-#define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0, 0, 0}
 #define meshtastic_ModuleConfig_TrafficManagementConfig_init_zero {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -739,6 +750,10 @@ extern "C" {
 #define meshtastic_ModuleConfig_DetectionSensorConfig_monitor_pin_tag 6
 #define meshtastic_ModuleConfig_DetectionSensorConfig_detection_trigger_type_tag 7
 #define meshtastic_ModuleConfig_DetectionSensorConfig_use_pullup_tag 8
+#define meshtastic_ModuleConfig_DetectionSensorConfig_minimum_detect_secs_tag 9
+#define meshtastic_ModuleConfig_DetectionSensorConfig_burst_gap_secs_tag 10
+#define meshtastic_ModuleConfig_DetectionSensorConfig_minimum_alert_secs_tag 11
+#define meshtastic_ModuleConfig_DetectionSensorConfig_send_clear_tag 12
 #define meshtastic_ModuleConfig_AudioConfig_codec2_enabled_tag 1
 #define meshtastic_ModuleConfig_AudioConfig_ptt_pin_tag 2
 #define meshtastic_ModuleConfig_AudioConfig_bitrate_tag 3
@@ -750,7 +765,6 @@ extern "C" {
 #define meshtastic_ModuleConfig_PaxcounterConfig_paxcounter_update_interval_tag 2
 #define meshtastic_ModuleConfig_PaxcounterConfig_wifi_threshold_tag 3
 #define meshtastic_ModuleConfig_PaxcounterConfig_ble_threshold_tag 4
-#define meshtastic_ModuleConfig_PaxcounterConfig_report_ids_tag 5
 #define meshtastic_ModuleConfig_TrafficManagementConfig_position_min_interval_secs_tag 4
 #define meshtastic_ModuleConfig_TrafficManagementConfig_nodeinfo_direct_response_max_hops_tag 6
 #define meshtastic_ModuleConfig_TrafficManagementConfig_rate_limit_window_secs_tag 8
@@ -946,7 +960,11 @@ X(a, STATIC,   SINGULAR, BOOL,     send_bell,         4) \
 X(a, STATIC,   SINGULAR, STRING,   name,              5) \
 X(a, STATIC,   SINGULAR, UINT32,   monitor_pin,       6) \
 X(a, STATIC,   SINGULAR, UENUM,    detection_trigger_type,   7) \
-X(a, STATIC,   SINGULAR, BOOL,     use_pullup,        8)
+X(a, STATIC,   SINGULAR, BOOL,     use_pullup,        8) \
+X(a, STATIC,   SINGULAR, UINT32,   minimum_detect_secs,   9) \
+X(a, STATIC,   SINGULAR, UINT32,   burst_gap_secs,   10) \
+X(a, STATIC,   SINGULAR, UINT32,   minimum_alert_secs,  11) \
+X(a, STATIC,   SINGULAR, BOOL,     send_clear,       12)
 #define meshtastic_ModuleConfig_DetectionSensorConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_DetectionSensorConfig_DEFAULT NULL
 
@@ -965,8 +983,7 @@ X(a, STATIC,   SINGULAR, UINT32,   i2s_sck,           7)
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
 X(a, STATIC,   SINGULAR, UINT32,   paxcounter_update_interval,   2) \
 X(a, STATIC,   SINGULAR, INT32,    wifi_threshold,    3) \
-X(a, STATIC,   SINGULAR, INT32,    ble_threshold,     4) \
-X(a, STATIC,   SINGULAR, BOOL,     report_ids,        5)
+X(a, STATIC,   SINGULAR, INT32,    ble_threshold,     4)
 #define meshtastic_ModuleConfig_PaxcounterConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_PaxcounterConfig_DEFAULT NULL
 
@@ -1164,14 +1181,14 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_AmbientLightingConfig_size 14
 #define meshtastic_ModuleConfig_AudioConfig_size 19
 #define meshtastic_ModuleConfig_CannedMessageConfig_size 49
-#define meshtastic_ModuleConfig_DetectionSensorConfig_size 44
+#define meshtastic_ModuleConfig_DetectionSensorConfig_size 64
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_size 42
 #define meshtastic_ModuleConfig_MQTTConfig_size  224
 #define meshtastic_ModuleConfig_MapReportSettings_size 14
 #define meshtastic_ModuleConfig_MeshBeaconConfig_BroadcastTarget_size 10
 #define meshtastic_ModuleConfig_MeshBeaconConfig_size 324
 #define meshtastic_ModuleConfig_NeighborInfoConfig_size 10
-#define meshtastic_ModuleConfig_PaxcounterConfig_size 32
+#define meshtastic_ModuleConfig_PaxcounterConfig_size 30
 #define meshtastic_ModuleConfig_RangeTestConfig_size 12
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_size 96
 #define meshtastic_ModuleConfig_SerialConfig_size 28
